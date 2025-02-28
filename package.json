@@ -1,0 +1,16 @@
+{
+  "name": "xg-replay",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "author": "xigua",
+  "keywords": [],
+  "license": "ISC",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "rrweb": "2.0.0-alpha.4"
+  }
+}
