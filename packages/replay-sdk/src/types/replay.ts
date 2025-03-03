@@ -140,3 +140,102 @@ export type InitialReplayPluginOptions = Omit<
   ReplayPluginOptions,
   "sessionSampleRate" | "errorSampleRate"
 >;
+
+export type RecordingEvent = ReplayFrameEvent | ReplayEventWithTime;
+
+export type EventBufferType = "sync" | "worker";
+
+export interface EventBuffer {
+  /**
+   * If any events have been added to the buffer.
+   */
+  readonly hasEvents: boolean;
+
+  /**
+   * The buffer type
+   */
+  readonly type: EventBufferType;
+
+  /**
+   * If the event buffer contains a checkout event.
+   */
+  hasCheckout: boolean;
+
+  /**
+   * Destroy the event buffer.
+   */
+  destroy(): void;
+
+  /**
+   * Clear the event buffer.
+   */
+  clear(): void;
+
+  /**
+   * Add an event to the event buffer.
+   *
+   * Returns a promise that resolves if the event was successfully added, else rejects.
+   */
+  addEvent(event: RecordingEvent): Promise<AddEventResult>;
+
+  /**
+   * Clears and returns the contents of the buffer.
+   */
+  finish(): Promise<ReplayRecordingData>;
+
+  /**
+   * Get the earliest timestamp in ms of any event currently in the buffer.
+   */
+  getEarliestTimestamp(): number | null;
+}
+
+export type AddEventResult = void;
+
+export type ReplayRecordingData = {};
+
+export interface Timeouts {
+  sessionIdlePause: number;
+  sessionIdleExpire: number;
+}
+
+export type ReplayRecordingMode = "session" | "buffer";
+
+export interface Session {
+  id: string;
+
+  /**
+   * Start time of current session (in ms)
+   */
+  started: number;
+
+  /**
+   * Last known activity of the session (in ms)
+   */
+  lastActivity: number;
+
+  /**
+   * Segment ID for replay events
+   */
+  segmentId: number;
+
+  /**
+   * The ID of the previous session.
+   * If this is empty, there was no previous session.
+   */
+  previousSessionId?: string;
+
+  /**
+   * Is the session sampled? `false` if not sampled, otherwise, `session` or `buffer`
+   */
+  sampled: Sampled;
+}
+
+export interface SessionOptions
+  extends Pick<ReplayPluginOptions, "sessionSampleRate" | "stickySession"> {
+  /**
+   * Should buffer recordings to be saved later either by error sampling, or by
+   * manually calling `flush()`. This is only a factor if not sampled for a
+   * session-based replay.
+   */
+  allowBuffering: boolean;
+}

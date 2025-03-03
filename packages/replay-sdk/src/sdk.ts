@@ -93,7 +93,7 @@ export class Replay {
     ignore = [],
     // 自定义函数，用于自定义文本和元素的屏蔽规则
     maskFn,
-  }) {
+  } = {}) {
     this.name = Replay.id;
 
     this._recordingOptions = {
@@ -172,6 +172,17 @@ export class Replay {
   }
 
   start() {}
+
+  init() {
+    if (!isBrowser() || this._replay) return;
+
+    this._replay = new ReplayContainer({
+      options: this._initialOptions,
+      recordingOptions: this._recordingOptions,
+    });
+
+    this._replay.init();
+  }
 }
 
 export function isBrowser(): boolean {
