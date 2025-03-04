@@ -162,6 +162,10 @@ export class ReplayContainer {
     return this._isPaused;
   }
 
+  public getOptions(): ReplayPluginOptions {
+    return this._options;
+  }
+
   init(previousSessionId?: string): void {
     // 初始化会话
     this._initSession(previousSessionId);
@@ -343,6 +347,78 @@ export class ReplayContainer {
     }
   };
 
+  private async _runFlush(): Promise<void> {
+    const replayId = this.getSessionId();
+
+    if (!this.session || !this.eventBuffer || !replayId) {
+      console.error("没有会话或者缓冲区");
+      return;
+    }
+
+    // 收集并添加性能相关的事件
+    // await this._addPerformanceEntries();
+
+    // 再次检查缓冲区，因为添加性能事件可能回导致缓冲区清空
+    if (!this.eventBuffer || !this.eventBuffer.hasEvents) {
+      return;
+    }
+
+    // 收集当前进程的内存占用情况
+    // Only attach memory event if eventBuffer is not empty
+    // await addMemoryEntry(this);
+
+    // 添加 MemoryEntry 可能花费一些时间，期间 eventBuffer 可能会被销毁，因此需要再次检查
+    if (!this.eventBuffer) {
+      return;
+    }
+
+    // 确保回访id 没有发生变化
+    // 如果 replayId 发生变化，说明当前 eventBuffer 可能已经失效，因此停止刷新
+    if (replayId !== this.getSessionId()) {
+      return;
+    }
+
+    try {
+      // 确保回访的初始时间是准确的
+      this._updateInitialTimestampFromEventBuffer();
+
+      const timestamp = Date.now();
+
+      // 计算回放的持续时间，并确保它不超过最大时长
+      // 允许 30 秒的缓冲时间，以适应可能的延迟（如浏览器挂起时的延迟）
+      if (
+        timestamp - this._context.initialTimestamp >
+        this._options.maxReplayDuration + 30_000
+      ) {
+        throw new Error("会话时间太长，不会发送");
+      }
+
+      const eventContext = this._popEventContext();
+      // 无论发送重放的结果如何，始终递增segmentId
+      const segmentId = this.session.segmentId++;
+      this._maybeSaveSession();
+
+      // 不管发送重放的结果如何，都会清空事件缓冲区
+      const recordingData = await this.eventBuffer.finish();
+
+      // 发送数据到服务器
+      await sendReplay({
+        replayId,
+        recordingData,
+        segmentId,
+        eventContext,
+        session: this.session,
+        options: this.getOptions(),
+        timestamp,
+      });
+    } catch (err) {
+      // this.handleException(err);
+
+      // 重试了3次，但都失败了，这里完全停止回访，以避免数据不一致
+      this.stop({ reason: "sendReplay" });
+    }
+  }
+
   /** 检查会话是否过期 */
   checkAndHandleExpiredSession(): boolean | void {
     if (
@@ -392,6 +468,10 @@ export class ReplayContainer {
     }
     await this.stop({ reason: "刷新会话" });
     this.init(session.id);
+  }
+
+  public getSessionId(): string | undefined {
+    return this.session && this.session.id;
   }
 
   /**
@@ -497,6 +577,42 @@ export class ReplayContainer {
   private _maybeSaveSession(): void {
     if (this.session && this._options.stickySession) {
       saveSession(this.session);
+    }
+  }
+
+  /**
+   * Return and clear _context
+   */
+  private _popEventContext(): PopEventContext {
+    const _context = {
+      initialTimestamp: this._context.initialTimestamp,
+      initialUrl: this._context.initialUrl,
+      errorIds: Array.from(this._context.errorIds),
+      traceIds: Array.from(this._context.traceIds),
+      urls: this._context.urls,
+    };
+
+    this._clearContext();
+
+    return _context;
+  }
+
+  /** 根据缓冲区更新初始时间戳 */
+  private _updateInitialTimestampFromEventBuffer(): void {
+    const { session, eventBuffer } = this;
+    if (!session || !eventBuffer || this._requiresManualStart) {
+      return;
+    }
+
+    // 只有 segmentId === 0 时（即第一段回放）才允许更新初始时间戳，
+    // 后续的回放片段不会修改时间戳，避免数据错乱。
+    if (session.segmentId) {
+      return;
+    }
+
+    const earliestEvent = eventBuffer.getEarliestTimestamp();
+    if (earliestEvent && earliestEvent < this._context.initialTimestamp) {
+      this._context.initialTimestamp = earliestEvent;
     }
   }
 

@@ -143,6 +143,8 @@ export type InitialReplayPluginOptions = Omit<
 
 export type RecordingEvent = ReplayFrameEvent | ReplayEventWithTime;
 
+export type ReplayRecordingData = string | Uint8Array;
+
 export type EventBufferType = "sync" | "worker";
 
 export interface EventBuffer {
@@ -191,8 +193,6 @@ export interface EventBuffer {
 
 export type AddEventResult = void;
 
-export type ReplayRecordingData = {};
-
 export interface Timeouts {
   sessionIdlePause: number;
   sessionIdleExpire: number;
@@ -238,4 +238,27 @@ export interface SessionOptions
    * session-based replay.
    */
   allowBuffering: boolean;
+}
+
+export interface WorkerRequest {
+  id: number;
+  method: "clear" | "addEvent" | "finish";
+  arg?: string;
+}
+
+export interface WorkerResponse {
+  id: number;
+  method: string;
+  success: boolean;
+  response: unknown;
+}
+
+export interface SendReplayData {
+  recordingData: ReplayRecordingData;
+  replayId: string;
+  segmentId: number;
+  eventContext: PopEventContext;
+  timestamp: number;
+  session: Session;
+  options: ReplayPluginOptions;
 }

@@ -47,3 +47,12 @@ export const REPLAY_SESSION_KEY = "replaySession";
 
 /** 当录制的数据超过这个大小时,停止 */
 export const REPLAY_MAX_EVENT_BUFFER_SIZE = 20_000_000; // ~20MB
+
+/** 重试间隔 */
+export const RETRY_BASE_INTERVAL = 5000;
+/** 重试次数 */
+export const RETRY_MAX_COUNT = 3;
+
+export const UNABLE_TO_SEND_REPLAY = "无法发送回放";
+
+export const REPLAY_EVENT_NAME = "replay_event";
