@@ -1,12 +1,8 @@
 import type { ReplayEvent, TransportMakeRequestResponse } from "@sentry/types";
 import type { RateLimits } from "@sentry/utils";
-import { resolvedSyncPromise } from "@sentry/utils";
-import { isRateLimited, updateRateLimits } from "@sentry/utils";
 
 import { REPLAY_EVENT_NAME, UNABLE_TO_SEND_REPLAY } from "../constants";
 import type { ReplayRecordingData, SendReplayData } from "../types";
-import { createReplayEnvelope } from "./createReplayEnvelope";
-import { prepareReplayEvent } from "./prepareReplayEvent";
 
 /**
  * Send replay attachment using `fetch()`
@@ -44,21 +40,6 @@ export async function sendReplayRequest({
     replay_type: session.sampled,
   };
 
-  const replayEvent = await prepareReplayEvent({
-    scope,
-    client,
-    replayId,
-    event: baseEvent,
-  });
-
-  if (!replayEvent) {
-    // Taken from baseclient's `_processEvent` method, where this is handled for errors/transactions
-    client.recordDroppedEvent("event_processor", "replay", baseEvent);
-    DEBUG_BUILD &&
-      logger.info("An event processor returned `null`, will not send event.");
-    return resolvedSyncPromise({});
-  }
-
   /*
   For reference, the fully built event looks something like this:
   {
@@ -93,23 +74,12 @@ export async function sendReplayRequest({
   }
   */
 
-  // Prevent this data (which, if it exists, was used in earlier steps in the processing pipeline) from being sent to
-  // sentry. (Note: Our use of this property comes and goes with whatever we might be debugging, whatever hacks we may
-  // have temporarily added, etc. Even if we don't happen to be using it at some point in the future, let's not get rid
-  // of this `delete`, lest we miss putting it back in the next time the property is in use.)
-  delete replayEvent.sdkProcessingMetadata;
-
-  const envelope = createReplayEnvelope(
-    replayEvent,
-    preparedRecordingData,
-    dsn,
-    client.getOptions().tunnel
-  );
+  console.log("preparedRecordingData", baseEvent, preparedRecordingData);
 
   let response: TransportMakeRequestResponse;
 
   try {
-    response = await transport.send(envelope);
+    // response = await transport.send(envelope);
   } catch (err) {
     const error = new Error(UNABLE_TO_SEND_REPLAY);
 
@@ -123,23 +93,18 @@ export async function sendReplayRequest({
     throw error;
   }
 
-  // If the status code is invalid, we want to immediately stop & not retry
+  // 如果状态码无效，立即停止且不重试
   if (
     typeof response.statusCode === "number" &&
     (response.statusCode < 200 || response.statusCode >= 300)
   ) {
-    throw new TransportStatusCodeError(response.statusCode);
-  }
-
-  const rateLimits = updateRateLimits({}, response);
-  if (isRateLimited(rateLimits, "replay")) {
-    throw new RateLimitError(rateLimits);
+    throw new HttpStatusCodeError(response.statusCode);
   }
 
   return response;
 }
 
-export class TransportStatusCodeError extends Error {
+export class HttpStatusCodeError extends Error {
   public constructor(statusCode: number) {
     super(`请求返回的状态码 ${statusCode}`);
   }
@@ -157,6 +122,7 @@ export class RateLimitError extends Error {
   }
 }
 
+/** 处理录制数据 */
 export function prepareRecordingData({
   recordingData,
   headers,
@@ -166,17 +132,16 @@ export function prepareRecordingData({
 }): ReplayRecordingData {
   let payloadWithSequence;
 
-  // XXX: newline is needed to separate sequence id from events
   const replayHeaders = `${JSON.stringify(headers)}
 `;
 
+  // 判断录制的数据是 string 还是 二进制
   if (typeof recordingData === "string") {
     payloadWithSequence = `${replayHeaders}${recordingData}`;
   } else {
+    // 将 string 转换成 Uint8Array （二进制）
     const enc = new TextEncoder();
-    // XXX: newline is needed to separate sequence id from events
     const sequence = enc.encode(replayHeaders);
-    // Merge the two Uint8Arrays
     payloadWithSequence = new Uint8Array(
       sequence.length + recordingData.length
     );

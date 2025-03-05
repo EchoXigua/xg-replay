@@ -15,75 +15,58 @@ type RecordingEmitCallback = (
 ) => void;
 
 /**
- * Handler for recording events.
+ * 处理录制数据
  *
- * Adds to event buffer, and has varying flushing behaviors if the event was a checkout.
+ * 将数据添加到缓冲区，达到条件后，发送到服务器
  */
 export function getHandleRecordingEmit(
   replay: ReplayContainer
 ): RecordingEmitCallback {
+  // 标记是否处理第一个事件
   let hadFirstEvent = false;
 
   return (event: RecordingEvent, _isCheckout?: boolean) => {
-    // If this is false, it means session is expired, create and a new session and wait for checkout
     if (!replay.checkAndHandleExpiredSession()) {
-      console.warn("Received replay event after session expired.");
+      console.warn("会话过期");
       return;
     }
 
-    // `_isCheckout` is only set when the checkout is due to `checkoutEveryNms`
-    // We also want to treat the first event as a checkout, so we handle this specifically here
+    // 检查是否快照，如果是第一个事件，会认为需要快照
     const isCheckout = _isCheckout || !hadFirstEvent;
-    hadFirstEvent = true;
+    hadFirstEvent = true; // 确保后续事件不会误判为快照
 
-    if (replay.clickDetector) {
-      updateClickDetectorForRecordingEvent(replay.clickDetector, event);
-    }
+    // 监测用户点击行为
+    // if (replay.clickDetector) {
+    //   updateClickDetectorForRecordingEvent(replay.clickDetector, event);
+    // }
 
-    // The handler returns `true` if we do not want to trigger debounced flush, `false` if we want to debounce flush.
+    // 批量上传录制数据
     replay.addUpdate(() => {
-      // The session is always started immediately on pageload/init, but for
-      // error-only replays, it should reflect the most recent checkout
-      // when an error occurs. Clear any state that happens before this current
-      // checkout. This needs to happen before `addEvent()` which updates state
-      // dependent on this reset.
+      // buffer 模式下，如果需要快照，会清除旧的录制数据
       if (replay.recordingMode === "buffer" && isCheckout) {
         replay.setInitialState();
       }
 
-      // If the event is not added (e.g. due to being paused, disabled, or out of the max replay duration),
-      // Skip all further steps
+      // 如果事件未被添加（可能是因为暂停、禁用或超出了最大回放时长）
       if (!addEventSync(replay, event, isCheckout)) {
-        // Return true to skip scheduling a debounced flush
+        // 跳过 flush 逻辑，直接返回 true，表示不触发 debounced flush。
         return true;
       }
 
-      // Different behavior for full snapshots (type=2), ignore other event types
       // See https://github.com/rrweb-io/rrweb/blob/d8f9290ca496712aa1e7d472549480c4e7876594/packages/rrweb/src/types.ts#L16
+      // 不是快照，不触发 flush
       if (!isCheckout) {
         return false;
       }
 
-      // Additionally, create a meta event that will capture certain SDK settings.
-      // In order to handle buffer mode, this needs to either be done when we
-      // receive checkout events or at flush time.
-      //
-      // `isCheckout` is always true, but want to be explicit that it should
-      // only be added for checkouts
       addSettingsEvent(replay, isCheckout);
 
-      // If there is a previousSessionId after a full snapshot occurs, then
-      // the replay session was started due to session expiration. The new session
-      // is started before triggering a new checkout and contains the id
-      // of the previous session. Do not immediately flush in this case
-      // to avoid capturing only the checkout and instead the replay will
-      // be captured if they perform any follow-up actions.
+      // 如果 session 由旧 session 继承，不立即 flush：等待用户有实际交互后再上传。
       if (replay.session && replay.session.previousSessionId) {
         return true;
       }
 
-      // When in buffer mode, make sure we adjust the session started date to the current earliest event of the buffer
-      // this should usually be the timestamp of the checkout event, but to be safe...
+      // buffer 模式下 更新 session 的开始事件
       if (
         replay.recordingMode === "buffer" &&
         replay.session &&
@@ -92,7 +75,7 @@ export function getHandleRecordingEmit(
         const earliestEvent = replay.eventBuffer.getEarliestTimestamp();
         if (earliestEvent) {
           console.info(
-            `Updating session start time to earliest event in buffer to ${new Date(
+            `更新会话的开始事件为缓冲区最早的事件，时间为： ${new Date(
               earliestEvent
             )}`
           );
@@ -105,14 +88,10 @@ export function getHandleRecordingEmit(
         }
       }
 
+      // session 模式，实时记录并上传数据，立即调用 flush
       if (replay.recordingMode === "session") {
-        // If the full snapshot is due to an initial load, we will not have
-        // a previous session ID. In this case, we want to buffer events
-        // for a set amount of time before flushing. This can help avoid
-        // capturing replays of users that immediately close the window.
-
-        // This should never reject
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        // 如果完整快照是由于页面初始加载触发的，那么不会有（previous session ID）
+        // 在这种情况下，需要将事件缓冲一段时间后再刷新（flush），以避免捕获那些立即关闭窗口的用户的行为。
         void replay.flush();
       }
 

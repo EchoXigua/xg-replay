@@ -4,11 +4,7 @@ import {
   UNABLE_TO_SEND_REPLAY,
 } from "../constants";
 import type { SendReplayData } from "../types";
-import {
-  RateLimitError,
-  TransportStatusCodeError,
-  sendReplayRequest,
-} from "./sendReplayRequest";
+import { HttpStatusCodeError, sendReplayRequest } from "./sendReplayRequest";
 
 /**
  * 发送回访数据到服务器，默认会重试3次
@@ -30,10 +26,7 @@ export async function sendReplay(
     await sendReplayRequest(replayData);
     return true;
   } catch (err) {
-    if (
-      err instanceof TransportStatusCodeError ||
-      err instanceof RateLimitError
-    ) {
+    if (err instanceof HttpStatusCodeError) {
       throw err;
     }
 

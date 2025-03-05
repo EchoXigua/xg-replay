@@ -56,3 +56,5 @@ export const RETRY_MAX_COUNT = 3;
 export const UNABLE_TO_SEND_REPLAY = "无法发送回放";
 
 export const REPLAY_EVENT_NAME = "replay_event";
+
+export const API_URI = "/replay";

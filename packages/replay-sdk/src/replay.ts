@@ -14,6 +14,10 @@ import {
   ReplayRecordingMode,
   AddEventResult,
   Session,
+  EventBuffer,
+  ReplayOptions,
+  ReplayCanvasOptions,
+  AddUpdateCallback,
 } from "./types";
 
 import { debounce } from "./utils/debounce";
@@ -21,6 +25,8 @@ import { THROTTLED, throttle } from "./utils/throttle";
 import type { SKIPPED } from "./utils/throttle";
 import { addEvent, addEventSync } from "./utils/addEvent";
 import { isExpired } from "./utils";
+import { sendReplay } from "./utils/sendReplay";
+
 import { getHandleRecordingEmit } from "./utils/handleRecordingEmit";
 
 import { shouldRefreshSession } from "./session/shouldRefreshSession";
@@ -37,7 +43,7 @@ export class ReplayContainer {
    */
   private readonly _recordingOptions: RecordingOptions;
 
-  private _options: InternalReplayPluginOptions;
+  private _options: ReplayOptions;
 
   /**
    * Recording can happen in one of three modes:
@@ -100,12 +106,17 @@ export class ReplayContainer {
   private _debouncedFlush: ReturnType<typeof debounce>;
   private _flushLock: Promise<unknown> | undefined;
 
+  /**
+   * Internal use for canvas recording options
+   */
+  private _canvas: ReplayCanvasOptions | undefined;
+
   constructor({
     recordingOptions,
     options,
   }: {
     recordingOptions: RecordingOptions;
-    options: InternalReplayPluginOptions;
+    options: ReplayOptions;
   }) {
     this.eventBuffer = null;
     this.recordingMode = "session";
@@ -171,7 +182,7 @@ export class ReplayContainer {
     this._initSession(previousSessionId);
 
     if (!this.session) {
-      console.error(new Error("初始化的时候不能创建会话"));
+      console.error(new Error("无法初始化和创建会话"));
       return;
     }
 
@@ -190,7 +201,7 @@ export class ReplayContainer {
         ? "buffer"
         : "session";
 
-    console.info(`Starting replay in ${this.recordingMode} mode`);
+    console.info(`录制模式为 ${this.recordingMode}`);
 
     this._initRecording();
   }
@@ -237,6 +248,30 @@ export class ReplayContainer {
     this.startRecording();
   }
 
+  /**
+   * 处理批量上传
+   *
+   * @param cb
+   * @returns
+   */
+  public addUpdate(cb: AddUpdateCallback): void {
+    // 执行回调，如果返回 true，表示外部逻辑要手动处理 flush 过程
+    const cbResult = cb();
+
+    // 如果模式是 'buffer'，说明所有回放数据是缓存在内存中的，而不是立即处理，因此无需执行 flush 逻辑，直接返回
+    if (this.recordingMode === "buffer") {
+      return;
+    }
+
+    // 回调返回true，说明外部已经处理了 flush 逻辑，这里不再继续处理，直接返回
+    if (cbResult === true) {
+      return;
+    }
+
+    // 调用防抖的刷新函数
+    this._debouncedFlush();
+  }
+
   /** 启动录制 */
   public startRecording(): void {
     try {
@@ -256,10 +291,7 @@ export class ReplayContainer {
         }),
 
         // 处理录制事件的回调函数，用来发送或处理录制事件
-        emit: (event: RecordingEvent, _isCheckout?: boolean) => {
-          console.log("emit", event, _isCheckout);
-        },
-        // emit: getHandleRecordingEmit(this),
+        emit: getHandleRecordingEmit(this),
         // 处理 DOM 变更或其他变动
         onMutation: this._onMutationHandler,
         ...(canvasOptions
@@ -364,7 +396,6 @@ export class ReplayContainer {
     }
 
     // 收集当前进程的内存占用情况
-    // Only attach memory event if eventBuffer is not empty
     // await addMemoryEntry(this);
 
     // 添加 MemoryEntry 可能花费一些时间，期间 eventBuffer 可能会被销毁，因此需要再次检查
@@ -519,7 +550,7 @@ export class ReplayContainer {
     this._isEnabled = false;
 
     try {
-      console.info(`Stopping Replay${reason ? ` triggered by ${reason}` : ""}`);
+      console.info(`停止录制${reason ? ` 原因： ${reason}` : ""}`);
 
       //   this._removeListeners();
       this.stopRecording();
@@ -541,6 +572,10 @@ export class ReplayContainer {
     } catch (err) {
       //   this.handleException(err);
     }
+  }
+
+  public flush(): Promise<void> {
+    return this._debouncedFlush() as Promise<void>;
   }
 
   /**
@@ -615,6 +650,42 @@ export class ReplayContainer {
       this._context.initialTimestamp = earliestEvent;
     }
   }
+
+  /** 处理 rrweb 中 dom 变动 */
+  private _onMutationHandler = (mutations: unknown[]): boolean => {
+    const count = mutations.length;
+
+    const mutationLimit = this._options.mutationLimit;
+    const mutationBreadcrumbLimit = this._options.mutationBreadcrumbLimit;
+    const overMutationLimit = mutationLimit && count > mutationLimit;
+
+    // Create a breadcrumb if a lot of mutations happen at the same time
+    // We can show this in the UI as an information with potential performance improvements
+    // if (count > mutationBreadcrumbLimit || overMutationLimit) {
+    //   const breadcrumb = createBreadcrumb({
+    //     category: "replay.mutations",
+    //     data: {
+    //       count,
+    //       limit: overMutationLimit,
+    //     },
+    //   });
+    //   this._createCustomBreadcrumb(breadcrumb);
+    // }
+
+    // Stop replay if over the mutation limit
+    if (overMutationLimit) {
+      // This should never reject
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      this.stop({
+        reason: "mutationLimit",
+        forceFlush: this.recordingMode === "session",
+      });
+      return false;
+    }
+
+    // `true` means we use the regular mutation handling by rrweb
+    return true;
+  };
 
   /**
    * Adds listeners to record events for the replay

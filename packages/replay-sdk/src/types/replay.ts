@@ -1,7 +1,7 @@
 import type {
-  //   CanvasManagerInterface,
-  //   CanvasManagerOptions,
-  //   ReplayEventWithTime,
+  CanvasManagerInterface,
+  CanvasManagerOptions,
+  ReplayEventWithTime,
   RrwebRecordOptions,
 } from "./rrweb";
 
@@ -9,143 +9,178 @@ export type RecordingOptions = RrwebRecordOptions;
 
 export interface ReplayNetworkOptions {
   /**
-   * Capture request/response details for XHR/Fetch requests that match the given URLs.
-   * The URLs can be strings or regular expressions.
-   * When provided a string, we will match any URL that contains the given string.
-   * You can use a Regex to handle exact matches or more complex matching.
-   *
-   * Only URLs matching these patterns will have bodies & additional headers captured.
+   * 指定允许捕获的 XHR/Fetch 请求 URL，支持字符串和正则表达式。
    */
   networkDetailAllowUrls: (string | RegExp)[];
 
   /**
-   * Deny request/response details for XHR/Fetch requests that match the given URLs.
-   * The URLs can be strings or regular expressions.
-   * When provided a string, we will deny any URL that contains the given string.
-   * You can use a Regex to handle exact matches or more complex matching.
-   * URLs matching these patterns will not have bodies & additional headers captured.
+   * 指定拒绝捕获的 XHR/Fetch 请求 URL，支持字符串和正则表达式。
    */
   networkDetailDenyUrls: (string | RegExp)[];
 
   /**
-   * If request & response bodies should be captured.
-   * Only applies to URLs matched by `networkDetailAllowUrls` and not matched by `networkDetailDenyUrls`.
-   * Defaults to true.
+   * 是否记录请求和响应的 body
+   * 仅适用于允许捕获且 不被排除的请求
+   * @default true
    */
   networkCaptureBodies: boolean;
 
   /**
-   * Capture the following request headers, in addition to the default ones.
-   * Only applies to URLs matched by `networkDetailAllowUrls` and not matched by `networkDetailDenyUrls`.
-   * Any headers defined here will be captured in addition to the default headers.
+   * 指定要额外捕获的请求头字段（除了默认字段）
    */
   networkRequestHeaders: string[];
 
   /**
-   * Capture the following response headers, in addition to the default ones.
-   * Only applies to URLs matched by `networkDetailAllowUrls` and not matched by `networkDetailDenyUrls`.
-   * Any headers defined here will be captured in addition to the default headers.
+   * 指定要额外捕获的响应头字段（除了默认字段）。
    */
   networkResponseHeaders: string[];
 }
 
-export interface ReplayPluginOptions extends ReplayNetworkOptions {
+export interface ReplayOptions extends ReplayNetworkOptions {
   /**
-   * If false, will create a new session per pageload. Otherwise, saves session
-   * to Session Storage.
+   * 是否在 session Storage 中保存会话
    */
   stickySession: boolean;
 
   /**
-   * The amount of time to wait before sending a replay
+   * 最短的回放数据上传间隔（单位：毫秒）
    */
   flushMinDelay: number;
 
   /**
-   * The max amount of time to wait before sending a replay
+   * 最长的回放数据上传间隔（单位：毫秒）
    */
   flushMaxDelay: number;
 
   /**
-   * Attempt to use compression when web workers are available
+   * 是否启用数据压缩（支持worker）
    *
-   * (default is true)
+   * @default true
    */
   useCompression: boolean;
 
   /**
-   * If defined, use this worker URL instead of the default included one for compression.
-   * This will only be used if `useCompression` is not false.
+   *  Web Worker 的 URL
    */
   workerUrl?: string;
 
   /**
-   * Block all media (e.g. images, svg, video) in recordings.
+   * 是否屏蔽所有媒体内容（如图片、SVG、视频等）
    */
   blockAllMedia: boolean;
 
   /**
-   * Mask all inputs in recordings
+   * 是否隐藏所有输入框内容
    */
   maskAllInputs: boolean;
 
   /**
-   * Mask all text in recordings
+   * 是否隐藏页面上的所有文本
    */
   maskAllText: boolean;
 
   /**
-   * A high number of DOM mutations (in a single event loop) can cause
-   * performance regressions in end-users' browsers. This setting will create
-   * a breadcrumb in the recording when the limit has been reached.
+   * DOM 变更过多时，添加一条日志
+   * 只用于警告，不会影响录制
    */
   mutationBreadcrumbLimit: number;
 
   /**
-   * A high number of DOM mutations (in a single event loop) can cause
-   * performance regressions in end-users' browsers. This setting will cause
-   * recording to stop when the limit has been reached.
+   * DOM 变更过多时，直接停止录制
+   * 过多的 DOM 变更可能导致性能问题，因此需要一个上限
    */
   mutationLimit: number;
 
   /**
-   * The max. time in ms to wait for a slow click to finish.
-   * After this amount of time we stop waiting for actions after a click happened.
-   * Set this to 0 to disable slow click capture.
+   * 慢点击的最长等待时间
    *
-   * Default: 7000ms
+   * @default 7000ms
    */
   slowClickTimeout: number;
 
   /**
-   * Ignore clicks on elements matching the given selectors for slow click detection.
+   * 不触发慢点击检测的元素选择器
    */
   slowClickIgnoreSelectors: string[];
 
   /**
-   * The min. duration (in ms) a replay has to have before it is sent to Sentry.
-   * Whenever attempting to flush a session that is shorter than this, it will not actually send it to Sentry.
-   * Note that this is capped at max. 15s.
+   * 最短的录制时长 ms
    */
   minReplayDuration: number;
 
   /**
-   * The max. duration (in ms) a replay session may be.
-   * This is capped at max. 60min.
+   * 最长的录制时长 ms
    */
   maxReplayDuration: number;
 }
 
-export type InitialReplayPluginOptions = Omit<
-  ReplayPluginOptions,
-  "sessionSampleRate" | "errorSampleRate"
->;
+type OptionalReplayOptions = Partial<ReplayOptions> & {
+  /**
+   * Mask element attributes that are contained in list
+   */
+  maskAttributes?: string[];
+};
+
+export interface ReplayPrivacyOptions {
+  /**
+   * Mask text content for elements that match the CSS selectors in the list.
+   */
+  mask?: string[];
+
+  /**
+   * Unmask text content for elements that match the CSS selectors in the list.
+   */
+  unmask?: string[];
+
+  /**
+   * Block elements that match the CSS selectors in the list. Blocking replaces
+   * the element with an empty placeholder with the same dimensions.
+   */
+  block?: string[];
+
+  /**
+   * Unblock elements that match the CSS selectors in the list. This is useful when using `blockAllMedia`.
+   */
+  unblock?: string[];
+
+  /**
+   * Ignore input events for elements that match the CSS selectors in the list.
+   */
+  ignore?: string[];
+
+  /**
+   * A callback function to customize how your text is masked.
+   */
+  maskFn?: (s: string) => string;
+}
+export interface ReplayConfiguration
+  extends ReplayPrivacyOptions,
+    OptionalReplayOptions,
+    Pick<RecordingOptions, "maskAllText" | "maskAllInputs"> {
+  /**
+   * 后端服务部署url
+   */
+  url?: string;
+}
 
 export type RecordingEvent = ReplayFrameEvent | ReplayEventWithTime;
 
 export type ReplayRecordingData = string | Uint8Array;
 
 export type EventBufferType = "sync" | "worker";
+
+export interface ReplayCanvasOptions {
+  enableManualSnapshot?: boolean;
+  recordCanvas: true;
+  getCanvasManager: (options: CanvasManagerOptions) => CanvasManagerInterface;
+  sampling: {
+    canvas: number;
+  };
+  dataURLOptions: {
+    type: string;
+    quality: number;
+  };
+}
 
 export interface EventBuffer {
   /**
@@ -261,4 +296,52 @@ export interface SendReplayData {
   timestamp: number;
   session: Session;
   options: ReplayPluginOptions;
+}
+
+export type AddUpdateCallback = () => boolean | void;
+
+export interface ReplayContainer {
+  eventBuffer: EventBuffer | null;
+  clickDetector: ReplayClickDetector | undefined;
+  /**
+   * List of PerformanceEntry from PerformanceObservers.
+   */
+  performanceEntries: AllPerformanceEntry[];
+
+  /**
+   * List of already processed performance data, ready to be added to replay.
+   */
+  replayPerformanceEntries: ReplayPerformanceEntry<AllPerformanceEntryData>[];
+  session: Session | undefined;
+  recordingMode: ReplayRecordingMode;
+  timeouts: Timeouts;
+  throttledAddEvent: (
+    event: RecordingEvent,
+    isCheckout?: boolean
+  ) => typeof THROTTLED | typeof SKIPPED | Promise<AddEventResult | null>;
+  isEnabled(): boolean;
+  isPaused(): boolean;
+  isRecordingCanvas(): boolean;
+  getContext(): InternalEventContext;
+  initializeSampling(): void;
+  start(): void;
+  stop(options?: { reason?: string; forceflush?: boolean }): Promise<void>;
+  pause(): void;
+  resume(): void;
+  startRecording(): void;
+  stopRecording(): boolean;
+  sendBufferedReplayOrFlush(options?: SendBufferedReplayOptions): Promise<void>;
+  conditionalFlush(): Promise<void>;
+  flush(): Promise<void>;
+  flushImmediate(): Promise<void>;
+  cancelFlush(): void;
+  triggerUserActivity(): void;
+  updateUserActivity(): void;
+  addUpdate(cb: AddUpdateCallback): void;
+  getOptions(): ReplayPluginOptions;
+  getSessionId(): string | undefined;
+  checkAndHandleExpiredSession(): boolean | void;
+  setInitialState(): void;
+  getCurrentRoute(): string | undefined;
+  handleException(err: unknown): void;
 }

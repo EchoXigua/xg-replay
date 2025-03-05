@@ -1,4 +1,8 @@
-import type { RecordingOptions, InitialReplayPluginOptions } from "./types";
+import type {
+  RecordingOptions,
+  ReplayOptions,
+  ReplayConfiguration,
+} from "./types";
 import { ReplayContainer } from "./replay";
 import {
   DEFAULT_FLUSH_MAX_DELAY,
@@ -6,6 +10,7 @@ import {
   MAX_REPLAY_DURATION,
   MIN_REPLAY_DURATION,
   MIN_REPLAY_DURATION_LIMIT,
+  API_URI,
 } from "./constants";
 
 const MEDIA_SELECTORS =
@@ -22,6 +27,8 @@ export class Replay {
   static id = "Replay";
   name: string;
 
+  url: string;
+
   /**
    * 传递给 `rrweb.record()` 的选项
    */
@@ -29,7 +36,7 @@ export class Replay {
   /**
    * 初始化需要传递的配置
    */
-  private readonly _initialOptions: InitialReplayPluginOptions;
+  private readonly _initialOptions: ReplayOptions;
 
   private _replay?: ReplayContainer;
 
@@ -93,8 +100,15 @@ export class Replay {
     ignore = [],
     // 自定义函数，用于自定义文本和元素的屏蔽规则
     maskFn,
-  } = {}) {
+    url = "",
+  }: ReplayConfiguration = {}) {
     this.name = Replay.id;
+
+    if (!url) {
+      throw new Error("请填写服务器url");
+    }
+
+    this.url = normalizeUrl(url + API_URI);
 
     this._recordingOptions = {
       maskAllInputs,
@@ -174,7 +188,7 @@ export class Replay {
   start() {}
 
   init() {
-    if (!isBrowser() || this._replay) return;
+    if (!isBrowser() || this._replay || !this.url) return;
 
     this._replay = new ReplayContainer({
       options: this._initialOptions,
@@ -194,4 +208,8 @@ function _getMergedNetworkHeaders(headers: string[]): string[] {
     ...DEFAULT_NETWORK_HEADERS,
     ...headers.map((header) => header.toLowerCase()),
   ];
+}
+
+function normalizeUrl(url: string): string {
+  return url.replace(/([^:])\/{2,}/g, "$1/");
 }
