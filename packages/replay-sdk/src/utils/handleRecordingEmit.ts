@@ -1,6 +1,6 @@
-import { EventType } from "@sentry-internal/rrweb";
+import { EventType } from "../enums";
 
-import { updateClickDetectorForRecordingEvent } from "../coreHandlers/handleClick";
+// import { updateClickDetectorForRecordingEvent } from "../coreHandlers/handleClick";
 import { saveSession } from "../session";
 import type {
   RecordingEvent,
@@ -30,6 +30,7 @@ export function getHandleRecordingEmit(
       console.warn("会话过期");
       return;
     }
+    console.log(event);
 
     // 检查是否快照，如果是第一个事件，会认为需要快照
     const isCheckout = _isCheckout || !hadFirstEvent;
@@ -113,7 +114,8 @@ export function createOptionsEvent(
     data: {
       tag: "options",
       payload: {
-        shouldRecordCanvas: replay.isRecordingCanvas(),
+        // shouldRecordCanvas: replay.isRecordingCanvas() || false,
+        shouldRecordCanvas: false,
         sessionSampleRate: options.sessionSampleRate,
         errorSampleRate: options.errorSampleRate,
         useCompressionOption: options.useCompression,

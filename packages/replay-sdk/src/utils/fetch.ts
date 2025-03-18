@@ -89,10 +89,8 @@ export function createTransport(
 export function serializeRecordingData(
   envelope: Envelope
 ): string | Uint8Array {
-  const [envHeaders, items] = envelope;
-
   // 优先转为字符串，在遇到二进制数据转为二进制
-  let parts: string | Uint8Array[] = JSON.stringify(envHeaders);
+  let parts: string | Uint8Array[] = "";
 
   function append(next: string | Uint8Array): void {
     if (typeof parts === "string") {
@@ -103,24 +101,18 @@ export function serializeRecordingData(
     }
   }
 
-  for (const item of items) {
-    const [itemHeaders, payload] = item;
-
-    append(`\n${JSON.stringify(itemHeaders)}\n`);
-
-    if (typeof payload === "string" || payload instanceof Uint8Array) {
-      append(payload);
-    } else {
-      let stringifiedPayload: string;
-      try {
-        stringifiedPayload = JSON.stringify(payload);
-      } catch (e) {
-        // 如果 JSON.stringify() 失败（可能是循环引用问题），使用 normalize(payload) 进行深度序列化。
-        // stringifiedPayload = JSON.stringify(normalize(payload));
-        stringifiedPayload = "error";
-      }
-      append(stringifiedPayload);
+  if (typeof envelope === "string" || envelope instanceof Uint8Array) {
+    append(envelope);
+  } else {
+    let stringifiedPayload: string;
+    try {
+      stringifiedPayload = JSON.stringify(envelope);
+    } catch (e) {
+      // 如果 JSON.stringify() 失败（可能是循环引用问题），使用 normalize(payload) 进行深度序列化。
+      // stringifiedPayload = JSON.stringify(normalize(payload));
+      stringifiedPayload = "error";
     }
+    append(stringifiedPayload);
   }
 
   return typeof parts === "string" ? parts : concatBuffers(parts);

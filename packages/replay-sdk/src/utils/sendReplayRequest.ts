@@ -3,18 +3,27 @@ import type { RateLimits } from "@sentry/utils";
 
 import { REPLAY_EVENT_NAME, UNABLE_TO_SEND_REPLAY } from "../constants";
 import type { ReplayRecordingData, SendReplayData } from "../types";
+import { makeFetchTransport } from "./fetch";
 
 /**
  * Send replay attachment using `fetch()`
  */
-export async function sendReplayRequest({
-  recordingData,
-  replayId,
-  segmentId: segment_id,
-  eventContext,
-  timestamp,
-  session,
-}: SendReplayData): Promise<TransportMakeRequestResponse> {
+export async function sendReplayRequest(
+  {
+    recordingData,
+    replayId,
+    segmentId: segment_id,
+    eventContext,
+    timestamp,
+    session,
+  }: SendReplayData,
+  url: string
+): Promise<TransportMakeRequestResponse> {
+  const transport = makeFetchTransport({
+    url,
+    headers: {},
+  });
+
   const preparedRecordingData = prepareRecordingData({
     recordingData,
     headers: {
@@ -39,6 +48,23 @@ export async function sendReplayRequest({
     segment_id,
     replay_type: session.sampled,
   };
+
+  const envelope = [
+    [{ type: "replay_event" }, baseEvent],
+    [
+      {
+        type: "replay_recording",
+        // If string then we need to encode to UTF8, otherwise will have
+        // wrong size. TextEncoder has similar browser support to
+        // MutationObserver, although it does not accept IE11.
+        length:
+          typeof recordingData === "string"
+            ? new TextEncoder().encode(recordingData).length
+            : recordingData.length,
+      },
+      recordingData,
+    ],
+  ];
 
   /*
   For reference, the fully built event looks something like this:
@@ -79,7 +105,7 @@ export async function sendReplayRequest({
   let response: TransportMakeRequestResponse;
 
   try {
-    // response = await transport.send(envelope);
+    response = await transport.send(recordingData);
   } catch (err) {
     const error = new Error(UNABLE_TO_SEND_REPLAY);
 

@@ -27,7 +27,7 @@ export class Replay {
   static id = "Replay";
   name: string;
 
-  url: string;
+  url: string = "";
 
   /**
    * 传递给 `rrweb.record()` 的选项
@@ -101,11 +101,13 @@ export class Replay {
     // 自定义函数，用于自定义文本和元素的屏蔽规则
     maskFn,
     url = "",
+    onData = () => {},
   }: ReplayConfiguration = {}) {
     this.name = Replay.id;
 
     if (!url) {
-      throw new Error("请填写服务器url");
+      console.error(new Error("replay sdk 加载失败，请填写服务器url"));
+      return;
     }
 
     this.url = normalizeUrl(url + API_URI);
@@ -159,15 +161,18 @@ export class Replay {
       networkCaptureBodies,
       networkRequestHeaders: _getMergedNetworkHeaders(networkRequestHeaders),
       networkResponseHeaders: _getMergedNetworkHeaders(networkResponseHeaders),
+
+      url: this.url,
+      onData,
     };
 
-    if (this._initialOptions.blockAllMedia) {
-      // 阻止媒体元素
-      this._recordingOptions.blockSelector = !this._recordingOptions
-        .blockSelector
-        ? MEDIA_SELECTORS
-        : `${this._recordingOptions.blockSelector},${MEDIA_SELECTORS}`;
-    }
+    // if (this._initialOptions.blockAllMedia) {
+    //   // 阻止媒体元素
+    //   this._recordingOptions.blockSelector = !this._recordingOptions
+    //     .blockSelector
+    //     ? MEDIA_SELECTORS
+    //     : `${this._recordingOptions.blockSelector},${MEDIA_SELECTORS}`;
+    // }
 
     // 防止重复初始化
     if (this._isInitialized && isBrowser()) {
@@ -195,7 +200,30 @@ export class Replay {
       recordingOptions: this._recordingOptions,
     });
 
+    // this._maybeLoadFromReplayCanvasIntegration(client);
+
     this._replay.init();
+  }
+
+  /**
+   * 处理回放的模式转换，非 session 模式下 触发 flush（数据刷新）
+   *
+   * - 如果当前处于 session 模式，直接立即刷新数据；
+   * - 如果是非 session 模式，则将数据刷新（flush），
+   * 并重新以 session 模式启动录制（如果 continueRecording 为 true）
+   */
+  public flush(options?: SendBufferedReplayOptions): Promise<void> {
+    if (!this._replay) {
+      return Promise.resolve();
+    }
+
+    // assuming a session should be recorded in this case
+    if (!this._replay.isEnabled()) {
+      this._replay.start();
+      return Promise.resolve();
+    }
+
+    return this._replay.sendBufferedReplayOrFlush(options);
   }
 }
 

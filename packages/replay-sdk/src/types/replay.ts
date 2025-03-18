@@ -38,6 +38,12 @@ export interface ReplayNetworkOptions {
 
 export interface ReplayOptions extends ReplayNetworkOptions {
   /**
+   * 发送到后端的url
+   */
+  url: string;
+
+  onData: Function;
+  /**
    * 是否在 session Storage 中保存会话
    */
   stickySession: boolean;

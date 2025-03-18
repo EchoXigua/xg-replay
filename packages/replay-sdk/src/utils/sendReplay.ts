@@ -23,7 +23,7 @@ export async function sendReplay(
   }
 
   try {
-    await sendReplayRequest(replayData);
+    await sendReplayRequest(replayData, options.url);
     return true;
   } catch (err) {
     if (err instanceof HttpStatusCodeError) {

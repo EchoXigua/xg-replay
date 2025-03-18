@@ -1,7 +1,8 @@
+import { getWorkerURL } from "@xigua/replay-worker";
+
 import type { EventBuffer } from "../types";
 import { EventBufferArray } from "./EventBufferArray";
 import { EventBufferProxy } from "./EventBufferProxy";
-import workerString from "./worker";
 
 interface CreateEventBufferParams {
   useCompression: boolean;
@@ -44,17 +45,13 @@ function _loadWorker(customWorkerUrl?: string): EventBufferProxy | void {
 }
 
 function _getWorkerUrl(): string {
+  return getWorkerURL();
+
   if (
     typeof __SENTRY_EXCLUDE_REPLAY_WORKER__ === "undefined" ||
     !__SENTRY_EXCLUDE_REPLAY_WORKER__
   ) {
     return getWorkerURL();
   }
-
   return "";
-}
-
-export function getWorkerURL(): string {
-  const workerBlob = new Blob([workerString]);
-  return URL.createObjectURL(workerBlob);
 }

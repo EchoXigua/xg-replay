@@ -26,8 +26,8 @@ import type { SKIPPED } from "./utils/throttle";
 import { addEvent, addEventSync } from "./utils/addEvent";
 import { isExpired } from "./utils";
 import { sendReplay } from "./utils/sendReplay";
-
 import { getHandleRecordingEmit } from "./utils/handleRecordingEmit";
+import { addGlobalListeners } from "./utils/addGlobalListeners";
 
 import { shouldRefreshSession } from "./session/shouldRefreshSession";
 import { clearSession } from "./session/clearSession";
@@ -239,11 +239,54 @@ export class ReplayContainer {
     });
 
     // this._removeListeners();
-    // this._addListeners();
+    this._addListeners();
 
     // 需要在开始记录之前设置为启用 因为 `record()` 能够触发刷新
     this._isEnabled = true;
     this._isPaused = false;
+
+    this.startRecording();
+  }
+
+  /**
+   * 处理回放的模式转换，非 session 模式下 触发 flush（数据刷新）
+   *
+   * - 如果当前处于 session 模式，直接立即刷新数据；
+   * - 如果是非 session 模式，则将数据刷新（flush），
+   * 并重新以 session 模式启动录制（如果 continueRecording 为 true）
+   */
+  public async sendBufferedReplayOrFlush({
+    continueRecording = true,
+  }: SendBufferedReplayOptions = {}): Promise<void> {
+    if (this.recordingMode === "session") {
+      return this.flushImmediate();
+    }
+
+    const activityTime = Date.now();
+
+    console.info("将缓冲区转为会话  buffer --->  session");
+
+    await this.flushImmediate();
+
+    const hasStoppedRecording = this.stopRecording();
+
+    if (!continueRecording || !hasStoppedRecording) {
+      return;
+    }
+
+    // 避免在多次调用时出现竞争情况，我们在这里再次检查是否仍然是缓冲模式
+    if ((this.recordingMode as ReplayRecordingMode) === "session") {
+      return;
+    }
+
+    // 在 session 模式下，重新开始回放
+    this.recordingMode = "session";
+
+    if (this.session) {
+      this._updateUserActivity(activityTime);
+      this._updateSessionActivity(activityTime);
+      this._maybeSaveSession();
+    }
 
     this.startRecording();
   }
@@ -379,6 +422,15 @@ export class ReplayContainer {
     }
   };
 
+  /**
+   * 用于立即刷新数据
+   */
+  public flushImmediate(): Promise<void> {
+    this._debouncedFlush();
+    // 立即调用 .flush() 确保刷新
+    return this._debouncedFlush.flush() as Promise<void>;
+  }
+
   private async _runFlush(): Promise<void> {
     const replayId = this.getSessionId();
 
@@ -431,8 +483,12 @@ export class ReplayContainer {
 
       // 不管发送重放的结果如何，都会清空事件缓冲区
       const recordingData = await this.eventBuffer.finish();
+      console.log("录制的数据", recordingData);
+
+      this._options.onData(recordingData);
 
       // 发送数据到服务器
+      return;
       await sendReplay({
         replayId,
         recordingData,
@@ -608,6 +664,13 @@ export class ReplayContainer {
     }
   }
 
+  /**
+   * 更新用户的最后活动时间
+   */
+  private _updateUserActivity(_lastActivity: number = Date.now()): void {
+    this._lastActivity = _lastActivity;
+  }
+
   /** 保存会话到本地 */
   private _maybeSaveSession(): void {
     if (this.session && this._options.stickySession) {
@@ -653,6 +716,8 @@ export class ReplayContainer {
 
   /** 处理 rrweb 中 dom 变动 */
   private _onMutationHandler = (mutations: unknown[]): boolean => {
+    console.log("dom change", mutations);
+
     const count = mutations.length;
 
     const mutationLimit = this._options.mutationLimit;
@@ -692,17 +757,17 @@ export class ReplayContainer {
    */
   private _addListeners(): void {
     try {
-      WINDOW.document.addEventListener(
-        "visibilitychange",
-        this._handleVisibilityChange
-      );
-      WINDOW.addEventListener("blur", this._handleWindowBlur);
-      WINDOW.addEventListener("focus", this._handleWindowFocus);
-      WINDOW.addEventListener("keydown", this._handleKeyboardEvent);
+      // WINDOW.document.addEventListener(
+      //   "visibilitychange",
+      //   this._handleVisibilityChange
+      // );
+      // WINDOW.addEventListener("blur", this._handleWindowBlur);
+      // WINDOW.addEventListener("focus", this._handleWindowFocus);
+      // WINDOW.addEventListener("keydown", this._handleKeyboardEvent);
 
-      if (this.clickDetector) {
-        this.clickDetector.addListeners();
-      }
+      // if (this.clickDetector) {
+      //   this.clickDetector.addListeners();
+      // }
 
       // There is no way to remove these listeners, so ensure they are only added once
       if (!this._hasInitializedCoreListeners) {
@@ -711,9 +776,9 @@ export class ReplayContainer {
         this._hasInitializedCoreListeners = true;
       }
     } catch (err) {
-      this.handleException(err);
+      // this.handleException(err);
     }
 
-    this._performanceCleanupCallback = setupPerformanceObserver(this);
+    // this._performanceCleanupCallback = setupPerformanceObserver(this);
   }
 }
