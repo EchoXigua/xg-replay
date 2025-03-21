@@ -1,5 +1,7 @@
 import { RouteObject } from 'react-router-dom'
 import { lazy } from 'react'
+import project from './project'
+import replay from './replay'
 
 const Layout = lazy(() => import('@/layout/MainLayout'))
 
@@ -17,7 +19,9 @@ const routes: RouteObject[] = [
     children: [
       { index: true, element: <Home /> }, // `index: true` 表示默认路由
       { path: 'about', element: <About /> },
-      { path: '*', element: <NotFound /> } // 404 页面
+      { path: '*', element: <NotFound /> },
+      ...project,
+      ...replay
     ]
   },
   {

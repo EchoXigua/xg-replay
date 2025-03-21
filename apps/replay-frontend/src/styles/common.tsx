@@ -1,9 +1,18 @@
 import { css, Global } from '@emotion/react'
 
 export const commonStyles = css`
-  .container {
-    max-width: 1200px;
-    margin: 0 auto;
+  .page-container {
+    .page-search {
+    }
+
+    .page-action {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .page-content {
+    }
   }
 
   .btn-primary {
